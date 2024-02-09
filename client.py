@@ -1,33 +1,25 @@
 import socket
 
-def get_user_input():
-    user_input = input("Введите числа и операции (например, 3 + 5 * 2): ")
-    return user_input.strip()
+SERVER = "127.0.0.1"
+PORT = 8000
 
-def send_data_to_server(data, server_address, server_port):
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client_socket:
-        client_socket.sendto(data.encode('utf-8'), (server_address, server_port))
+with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+    try:
+        while True:
+            print("\n-Нельзя делить на 0\n-Вводите только числа\n-Введите stop,либо Ctrl+C чтобы остановить\nПример: 5+8*7")
+            inp = input("Введите выражение: ")
 
-def receive_result_from_server():
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client_socket:
-        data, _ = client_socket.recvfrom(1024)
-        result = data.decode('utf-8')
-        return result
+            if inp == "stop":
+                break
 
-def main():
-    server_address = '127.0.0.1'  # Адрес сервера
-    server_port = 12345  # Порт сервера (замените на выбранный порт)
+            client.sendto(inp.encode(), (SERVER, PORT))
+            result, _ = client.recvfrom(1024)
 
-    while True:
-        user_input = get_user_input()
-
-        if user_input.lower() == 'exit':
-            break
-
-        send_data_to_server(user_input, server_address, server_port)
-
-        result = receive_result_from_server()
-        print(f"Результат: {result}")
-
-if __name__ == "__main__":
-    main()
+            if result.decode() == "division_by_zero_error":
+                print("Ошибка: Нельзя делить на ноль!")
+            elif "Некорректное выражение!" in result.decode():
+                print(f"Ошибка: {result.decode()}")
+            else:
+                print("Result:", result.decode())
+    except KeyboardInterrupt:
+        print("Клиент прерван пользователем")
