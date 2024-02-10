@@ -1,53 +1,80 @@
 import socket
 import re
-from queue import Queue, PriorityQueue
+from queue import LifoQueue
 
 class CalculatorServer:
     def __init__(self):
-        self.operations_queue = Queue() 
-        self.priority_queue = PriorityQueue() 
         self.previous_result = None
-
-    def calculate_result(self, expression):
-        if not re.match(r'^[\d\s\+\-\*/]+$', expression):
-            raise ValueError("Некорректное выражение!")
-
-        tokens = re.findall(r'(\d+|\S)', expression)
-        numbers = [int(token) for token in tokens if token.isdigit()]
-        operators = [token for token in tokens if token in {'+', '-', '*', '/'}]
-
-        result = numbers[0]
-        for i in range(len(operators)):
-            operator = operators[i]
-            number = numbers[i + 1]
-
-            if operator == '+':
-                result += number
-            elif operator == '-':
-                result -= number
-            elif operator == '*':
-                result *= number
-            elif operator == '/':
-                if number == 0:
-                    return "division_by_zero_error"
-                result /= number
-
-        return result
 
     def process_request(self, expression):
         try:
             if expression.lower() == 'mem':
-                return self.previous_result
+                return str(self.previous_result)
 
-            
             if 'mem' in expression.lower():
                 expression = expression.replace('mem', str(self.previous_result))
 
-            result = self.calculate_result(expression)
+            rpn_expression = self.infix_to_rpn(expression)
+            result = self.calculate_result(rpn_expression)
+
             self.previous_result = result
-            return result
+            return str(result)
         except ValueError as ve:
             return str(ve)
+
+    def infix_to_rpn(self, infix_expression):
+        output = []
+        stack = LifoQueue()
+        operators = {'+': 1, '-': 1, '*': 2, '/': 2}
+
+        for token in re.findall(r'(\d+|\S)', infix_expression):
+            if token.isdigit():
+                output.append(token)
+            elif token in operators:
+                while stack.qsize() > 0 and stack.queue[-1] in operators and operators[stack.queue[-1]] >= operators[token]:
+                    output.append(stack.get())
+                stack.put(token)
+            elif token == '(':
+                stack.put(token)
+            elif token == ')':
+                while stack.qsize() > 0 and stack.queue[-1] != '(':
+                    output.append(stack.get())
+                stack.get()
+
+        while stack.qsize() > 0:
+            output.append(stack.get())
+
+        return ' '.join(output)
+
+    def calculate_result(self, rpn_expression):
+        stack = LifoQueue()
+        
+        if not re.match(r'^[\d\s\+\-\*/]+$',rpn_expression):
+            raise ValueError("Некорректное выражение!")
+
+        for token in rpn_expression.split():
+            if token.isdigit():
+                stack.put(int(token))
+            elif token in {'+', '-', '*', '/'}:
+                operand2 = stack.get()
+                operand1 = stack.get()
+                result = self.apply_operator(token, operand1, operand2)
+                stack.put(result)
+
+        return stack.get()
+
+    def apply_operator(self, operator, operand1, operand2):
+        if operator == '+':
+            return operand1 + operand2
+        elif operator == '-':
+            return operand1 - operand2
+        elif operator == '*':
+            return operand1 * operand2
+        elif operator == '/':
+            if operand2 == 0:
+                
+                raise ValueError("Деление на ноль!")
+            return operand1 / operand2
 
     def run_server(self):
         LOCALHOST = "127.0.0.1"
@@ -60,10 +87,10 @@ class CalculatorServer:
             try:
                 while True:
                     data, client_address = server.recvfrom(1024)
-                    print("Выражение получено", client_address)
-
                     msg = data.decode()
+                    print(f"Клиент: {client_address} | Получено выражение: {msg}")
 
+                   
                     if msg.lower() == 'stop':
                         print("Сервер остановлен")
                         break
